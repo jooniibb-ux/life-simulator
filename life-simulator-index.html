@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="theme-color" content="#111111">
+<title>Life Simulator</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f4f4;color:#111;font-family:Arial,sans-serif;font-weight:700}
+button,input,select{font:inherit}
+.app{max-width:760px;margin:auto;padding:18px}
+.card{background:white;border:1px solid #ddd;border-radius:16px;padding:18px;margin:12px 0;box-shadow:0 2px 8px #0000000b}
+h1,h2,h3{margin:0 0 10px}
+p{line-height:1.5;margin:8px 0}
+.small{font-size:12px;color:#555}
+label{display:block;margin-top:12px;margin-bottom:5px}
+input,select{width:100%;padding:11px;border:1px solid #aaa;border-radius:9px;background:white;color:#111}
+button{border:0;border-radius:10px;padding:11px 14px;background:#111;color:white;cursor:pointer;margin:5px 4px 0 0}
+button.secondary{background:#e8e8e8;color:#111}
+.event{padding:13px;margin:9px 0;background:#fafafa;border-left:4px solid #222;border-radius:8px;line-height:1.55}
+.tag{font-size:11px;color:#555;margin-bottom:4px}
+.choice{background:#f0eee9;border-radius:10px;padding:14px;margin-top:12px}
+.choice button{display:block;width:100%;text-align:left}
+.person{display:inline-block;border:1px solid #ddd;border-radius:8px;padding:6px 8px;margin:3px;background:#fff}
+hr{border:0;border-top:1px solid #ddd;margin:15px 0}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<script>
+const $=id=>document.getElementById(id);
+const firstNames=["Emma","Maya","Noah","Lucas","Sophie","Eli","Avery","Clara","Daniel","Olivia","Jordan","Mason","Riley","Hannah","Lily","Tyler","Grace","Caleb","Nora","Ethan","Brooke","Jason","Mia","Zoe","Ryan","Alyssa","Cole","Jade","Marcus","Leah","Maddie","Ben","Kayla","Dylan","Chloe","Aaron","Tessa","Logan","Parker","Ruby"];
+const lastNames=["Carter","Bennett","Morgan","Reed","Hayes","Parker","Brooks","Miller","Foster","Collins","Warren","Ellis","Sullivan","Turner","Perry"];
+const traits=["outgoing","quiet","chaotic","ambitious","laid-back","curious","bookish","social","stubborn","helpful"];
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+let state=null;
+
+function randomName(){
+ let n=pick(firstNames)+" "+pick(lastNames);
+ while(state && state.people[n]) n=pick(firstNames)+" "+pick(lastNames);
+ return n;
+}
+function monthName(){
+ return state.date.toLocaleString("en-US",{month:"long",year:"numeric"});
+}
+function nextMonthName(){
+ const d=new Date(state.date); d.setMonth(d.getMonth()+1);
+ return d.toLocaleString("en-US",{month:"long",year:"numeric"});
+}
+function family(){
+ return {parents:[randomName(),randomName()],siblings:Math.random()<.72?[randomName()]:[],partner:null,children:[]};
+}
+function showStart(){
+ $("app").innerHTML=`
+ <div class="card">
+ <h1>🌎 Life Simulator</h1>
+ <p>A modern life storyteller where ordinary days can turn funny, awkward, exciting, or unexpectedly important.</p>
+ <label>Number of original characters</label>
+ <input id="count" type="number" min="1" max="12" value="8">
+ <label>Starting age</label>
+ <input id="age" type="number" min="16" max="60" value="18">
+ <button onclick="creator()">Create Characters</button>
+ </div>`;
+}
+function creator(){
+ const n=clamp(+$("count").value||8,1,12), age=clamp(+$("age").value||18,16,60);
+ let inputs="";
+ for(let i=0;i<n;i++) inputs+=`<label>Character ${i+1}</label><input class="charName" value="${firstNames[i]||"Character "+(i+1)}">`;
+ $("app").innerHTML=`<div class="card"><h1>✏️ Name Your Characters</h1>${inputs}<button onclick="begin(${age})">▶ Begin Simulation</button></div>`;
+}
+function begin(age){
+ state={date:new Date(2026,8,1),month:0,people:{},events:[],used:new Set(),threads:[],decision:null,pairUsed:new Set()};
+ document.querySelectorAll(".charName").forEach(x=>{
+   const name=x.value.trim()||"Unnamed";
+   state.people[name]={name,age,original:true,trait:pick(traits),family:family(),lastEvent:-99};
+ });
+ advance();
+}
+function originals(){
+ return Object.values(state.people).filter(p=>p.original);
+}
+function addEvent(text,type="EVENT"){
+ state.events.push({text,type,date:monthName()});
+}
+function choosePeople(){
+ return originals().slice().sort((a,b)=>(a.lastEvent-b.lastEvent)||Math.random()-.5);
+}
+function pairKey(a,b){return [a,b].sort().join("|")}
+function chooseOther(p){
+ let arr=Object.values(state.people).filter(x=>x.name!==p.name);
+ return pick(arr);
+}
+function storytellerEvent(p){
+ const other=chooseOther(p);
+ const pair=pairKey(p.name,other.name);
+ const options=[
+  ["compliment",`${p.name} got an unexpected compliment about something they normally take for granted. They pretended to play it cool, but the comment stayed on their mind for the rest of the day.`],
+  ["wrongplace",`${p.name} confidently walked into the wrong room and didn't realize it until someone started talking to them. They escaped with as much dignity as possible, which was not very much.`],
+  ["snack",`${p.name} bought a snack they had never tried before and immediately became obsessed with it. ${other.name} was subjected to a surprisingly passionate review afterward.`],
+  ["groupchat",`${p.name} accidentally sent a message to the wrong group chat. Thankfully, the mistake was funny enough that everyone moved on instead of making it a disaster.`],
+  ["hobby",`${p.name} randomly became interested in a new hobby this month. They are terrible at it so far, but that has somehow made them more determined.`],
+  ["neighbor",`${p.name} had a bizarrely friendly encounter with a neighbor while doing something completely ordinary. It ended with an invitation to a future get-together.`],
+  ["weather",`${p.name} got caught outside by terrible weather without being prepared for it. ${other.name} later laughed at the story after hearing how badly the plan had gone.`],
+  ["lost",`${p.name} spent an embarrassing amount of time looking for something they had misplaced. It was eventually found in a place so obvious that they refused to explain how it got there.`],
+  ["food",`${p.name} tried a new restaurant and immediately developed strong opinions about it. ${other.name} disagreed completely, turning dinner into a ridiculous debate.`],
+  ["oldfriend",`${p.name} unexpectedly heard from someone they had not talked to in a long time. The conversation was surprisingly easy, and they agreed to keep in touch.`],
+  ["work",`${p.name} had a strange day at work when a completely normal task somehow became everyone's problem. By closing time, the whole thing had become a running joke.`],
+  ["school",`${p.name} had an unexpectedly funny day at school after a small misunderstanding got passed around. By the end of the day, the original story was barely recognizable.`],
+  ["family",`${p.name} spent time with family and learned a piece of news they weren't expecting. It wasn't necessarily bad, but it gave them something to think about.`],
+  ["pet",`${p.name} ended up dealing with a ridiculous pet-related situation. They were annoyed for about five minutes before admitting it was actually pretty funny.`],
+  ["randomwin",`${p.name} had one of those weirdly lucky days where several tiny things went right in a row. Nothing life-changing happened, but they went home in an unusually good mood.`],
+  ["favor",`${p.name} did a small favor for ${other.name} without thinking much of it. Later, ${other.name} returned the favor in a way that genuinely surprised them.`],
+  ["photo",`${p.name} found an old photo that brought back a memory they had completely forgotten about. They spent the rest of the evening looking through other old pictures.`],
+  ["errand",`${p.name} went out to run one quick errand and somehow came home much later than planned. They still aren't entirely sure how the afternoon disappeared.`],
+  ["music",`${p.name} discovered a song they couldn't stop listening to. By the end of the month, at least one other person was complaining that they had heard it enough.`],
+  ["luck",`${p.name} found a small unexpected bit of good luck during an ordinary day. It wasn't a huge deal, but it improved their mood more than they expected.`]
+ ];
+ let key=p.name+":"+pick(options)[0], tries=0, chosen;
+ while(state.used.has(key)&&tries<30){chosen=pick(options);key=p.name+":"+chosen[0];tries++}
+ state.used.add(key);
+ p.lastEvent=state.month;
+ return chosen[1];
+}
+function addBackground(){
+ const n=randomName();
+ state.people[n]={name:n,age:18+Math.floor(Math.random()*25),original:false,trait:pick(traits),family:family(),lastEvent:state.month};
+ addEvent(`${n} entered the story almost by accident. They met someone from the main cast this month, and there is a decent chance they will show up again later.`,"NEW PERSON");
+}
+function makeThread(text){
+ state.threads.push({due:nextMonthName(),text});
+}
+function createDecision(){
+ const p=pick(originals());
+ const age=Math.floor(p.age);
+ const r=Math.random();
+ if(r<.12 && age>=18){
+   const o=chooseOther(p);
+   state.decision={p,type:"date",other:o,choices:[
+    ["Accept","Give the date a chance."],["Decline","Keep things friendly."]
+   ]};
+ }else if(r<.23){
+   state.decision={p,type:"job",choices:[
+    ["Take the job","Try something different."],["Stay","Keep the current routine."]
+   ]};
+ }else if(r<.31){
+   state.decision={p,type:"car",choices:[
+    ["Repair it","Deal with the problem."],["Wait","Put it off for now."],["Look for a new car","See what is available."]
+   ]};
+ }else if(r<.38){
+   state.decision={p,type:"move",choices:[
+    ["Move","Start making plans."],["Stay","Keep life where it is."]
+   ]};
+ }else if(r<.45 && age>=18){
+   state.decision={p,type:"education",choices:[
+    ["Go for it","Apply or enroll."],["Wait","Think about it longer."]
+   ]};
+ }else if(r<.50 && age>=21){
+   state.decision={p,type:"family",choices:[
+    ["Start planning","They feel ready to seriously consider it."],["Wait","They aren't ready yet."]
+   ]};
+ }else if(r<.55 && age>=16){
+   state.decision={p,type:"identity",choices:[
+    ["Talk to someone","Share their thoughts with someone they trust."],["Keep reflecting","Take more time to figure things out privately."]
+   ]};
+ }
+}
+function advance(){
+ state.month++;
+ state.date.setMonth(state.date.getMonth()+ (state.month===1?0:1));
+ state.events=[];
+ state.decision=null;
+ originals().sort(()=>Math.random()-.5).slice(0,Math.min(6,originals().length)).forEach(p=>addEvent(storytellerEvent(p)));
+ state.threads.filter(t=>t.due===monthName()).forEach(t=>addEvent("↳ "+t.text,"FOLLOW-UP"));
+ state.threads=state.threads.filter(t=>t.due!==monthName());
+ if(Math.random()<.45) addBackground();
+ if(Math.random()<.28){
+   const p=pick(originals()), o=chooseOther(p);
+   makeThread(`${p.name} mentioned a plan involving ${o.name} last month, and this month it finally happened. It didn't go exactly as expected, but it gave them a new story to tell.`);
+ }
+ createDecision();
+ render();
+}
+function chooseDecision(i){
+ const d=state.decision,p=d.p;
+ let follow="";
+ if(d.type==="date"){
+   if(i===1) follow=`${p.name} decided not to go on the date with ${d.other.name}. It felt like the natural choice, and neither person made the situation awkward.`;
+   else follow=pick([
+    `The date between ${p.name} and ${d.other.name} went surprisingly well. They laughed a lot and both seemed interested in doing something together again.`,
+    `The date between ${p.name} and ${d.other.name} was a little awkward. They got along fine, but neither seemed to feel much of a spark.`,
+    `${p.name} and ${d.other.name} had a genuinely fun date. They left still talking and seemed pleasantly surprised by how naturally the evening went.`
+   ]);
+ }else if(d.type==="job"){
+   follow=i===0?`${p.name} started the new job and the first week was chaotic. They are slowly getting the hang of it, though they already have a few funny stories.`:`${p.name} decided to stay at their current job. The familiar routine won for now, and they felt pretty comfortable with the decision.`;
+ }else if(d.type==="car"){
+   follow=i===0?`${p.name} finally got the car repaired. The mysterious noise is gone, at least for now.`:i===1?`${p.name} kept putting off the car problem. Unfortunately, the car has started making an even stranger noise.`:`${p.name} started looking for another car. Nothing has been purchased yet, but the idea is becoming more realistic.`;
+ }else if(d.type==="move"){
+   follow=i===0?`${p.name} began seriously planning a move. There are still plenty of details to figure out, but the idea no longer feels like a distant possibility.`:`${p.name} decided to stay put for now. They still like the idea of a fresh start someday, but they aren't ready yet.`;
+ }else if(d.type==="education"){
+   follow=i===0?`${p.name} took the first step toward the education opportunity they were considering. It is going to take some work, but they are excited to see where it leads.`:`${p.name} decided to wait before making an education change. For now, they want to see how things develop.`;
+ }else if(d.type==="family"){
+   follow=i===0?`${p.name} started seriously discussing the possibility of building a family in the future. Nothing happened overnight, but the conversation made the idea feel more real.`:`${p.name} decided to wait before making any family plans. There is no rush, and they feel better taking more time.`;
+ }else{
+   follow=i===0?`${p.name} talked through some thoughts about their identity with someone they trust. The conversation didn't give them every answer, but it made them feel less alone while figuring things out.`:`${p.name} decided to keep reflecting privately. They don't have to have everything figured out right away, and for now they are comfortable taking their time.`;
+ }
+ makeThread(follow);
+ state.decision=null;
+ render();
+}
+function render(){
+ let feed=state.events.slice().reverse().map(e=>`<div class="event"><div class="tag">${e.type} · ${e.date}</div>${e.text}</div>`).join("");
+ let d=state.decision;
+ let decision="";
+ if(d){
+  let desc=d.type==="date"?`${d.p.name} has been asked on a date by ${d.other.name}.`:d.type==="job"?`${d.p.name} has been offered a new job.`:d.type==="car"?`${d.p.name} has a car problem to deal with.`:d.type==="move"?`${d.p.name} is considering moving.`:d.type==="education"?`${d.p.name} is considering an education opportunity.`:d.type==="family"?`${d.p.name} is thinking seriously about starting a family in the future.`:`${d.p.name} has been thinking about how they describe their identity and what feels right for them.`;
+  decision=`<div class="choice"><h3>⚠️ IMPORTANT DECISION</h3><p>${desc}</p>${d.choices.map((c,i)=>`<button onclick="chooseDecision(${i})">${c[0]}<br><span style="font-size:12px;font-weight:400">${c[1]}</span></button>`).join("")}</div>`;
+ }
+ const people=Object.values(state.people).map(p=>`<span class="person">${p.name} · ${Math.floor(p.age)}</span>`).join("");
+ $("app").innerHTML=`
+ <div class="card"><h1>🌎 Life Simulator</h1><div>${monthName()}</div><div class="small">Month ${state.month} · ${Object.keys(state.people).length} people in the world</div></div>
+ <div class="card"><h2>📖 Story</h2>${feed}${decision||'<button onclick="advance()">▶ Next Month</button>'}</div>
+ <div class="card"><h2>👥 People</h2>${people}<hr><button class="secondary" onclick="showTrees()">🌳 Family Trees</button></div>`;
+}
+function showTrees(){
+ const names=Object.keys(state.people);
+ $("app").innerHTML=`<div class="card"><h2>🌳 Family Trees</h2><p class="small">Choose anyone. Background characters have families too.</p><select id="treeWho">${names.map(n=>`<option>${n}</option>`).join("")}</select><div id="treeBox" class="event"></div><button class="secondary" onclick="render()">← Back to Story</button></div>`;
+ drawTree();
+ $("treeWho").onchange=drawTree;
+}
+function drawTree(){
+ const n=$("treeWho").value,p=state.people[n],f=p.family;
+ $("treeBox").innerHTML=`<h3>${p.name}</h3>Parents: ${f.parents.map(x=>`<span class="person">${x}</span>`).join("")}<br><br> Siblings: ${f.siblings.length?f.siblings.map(x=>`<span class="person">${x}</span>`).join(""):"None yet"}<br><br>Partner: ${f.partner||"None yet"}<br><br>Children: ${f.children.length?f.children.map(x=>`<span class="person">${x}</span>`).join(""):"None yet"}`;
+}
+showStart();
+</script>
+</body>
+</html>
